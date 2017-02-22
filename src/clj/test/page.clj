@@ -21,15 +21,22 @@
    [:script {:src "/js/main.js"}]
    favicon])
 
+(defn html-response
+  [body]
+  {:status 200
+   :headers {"Content-Type" "text/html"}
+   :body body})
+
 (defn frame
   [& {:keys [contents page-class]
       :or {contents nil
            page-class :main}}]
   (let [body (vec (concat [:body] contents))]
-    (html5
-     {}
-     (head)
-     body)))
+    (html-response
+     (html5
+      {}
+      (head)
+      body))))
 
 (defn view
   [req]

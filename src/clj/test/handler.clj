@@ -1,17 +1,61 @@
 (ns test.handler
-  (:require [compojure.core :refer :all]
-            [compojure.route :as route]
+  (:require [clojure.tools.logging :as log]
+            [compojure.core :refer :all]
             [ring.middleware.defaults :refer [wrap-defaults site-defaults]]
+            [ring.middleware.format :refer [wrap-restful-format]]
+            [slingshot.slingshot :refer [try+]]
+            [bidi.ring :refer [make-handler]]
+            [ring.util.response :as res]
             [test.parser :as parser]
             [test.page :as page]))
 
-(defroutes app-routes
-  (GET "/" req (page/view req))
-  (POST "/api/query" req (parser/data-title))
-  (route/not-found "Not Found"))
+(defn error-body
+  [s]
+  {:error {:message s}})
 
-(def app
-  (wrap-defaults app-routes (assoc-in site-defaults [:security :anti-forgery] false)))
+(defn query-handler
+  [params]
+  (.println System/out (:body-params params))
+  (res/response (parser/parse-query (:body-params params))))
+
+
+(def api-routes {"/query" {:post query-handler}})
+  
+(def route-pack ["/" (assoc route/view-routes
+                        "api" api-routes)])
+
+(defmulti page-root identity)
+
+(defmethod page-root :default [_] #(page/view %))
+
+(defn- handle-route
+  [route]
+  (if (keyword? route)
+    (page-root route)
+    (identity route)))
+  
+(defn wrap-exception
+  [handler uri-re]
+  (fn [request]
+    (if (re-find uri-re (:uri request))
+      (try+
+        (handler request)
+        (catch map? {:keys [status message]}
+          (log/warn status message)
+          {:status status
+           :body (error-body message)})
+        (catch Exception e
+          (log/error e)
+          {:status 500
+           :body (error-body (.getMessage e))}))
+      (handler request))))
+
+  
+(def app (-> (make-handler route-pack handle-route)
+             (wrap-exception #"/api/")
+             (wrap-restful-format :formats [:transit-json])
+             (wrap-defaults (-> site-defaults
+                                (assoc-in [:security :anti-forgery] false)))))
 
 (defn init!
   [])
