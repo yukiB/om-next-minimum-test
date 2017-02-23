@@ -25,7 +25,8 @@
 
 (defmethod read :data/title
   [{:keys [state ast] :as env} key params]
-  (let [st @state]
+  (let [st @state
+        _ (print st)]
     (if (contains? st key) 
       {:value (key st)}
       {:remote ast})))
@@ -58,11 +59,12 @@
 
 (defmethod mutate `select/cat
   [{:keys [state ast] :as env} key {:keys [val]}]
+  (let [_ (println val)]
   (merge
    {:action
-    (swap! state update-in [:data/cats]
-           #(set (conj % [:cats/by-number val])))}
-   (when (seq val) {:remote ast})))
+    (swap! state update-in [:data/selected]
+           #(set (assoc {} :cat/id val)))}
+   (when (seq val) {:remote ast}))))
 
 (def reconciler
   (om/reconciler
@@ -70,15 +72,12 @@
      :normalize false
      :parser (om/parser {:read read :mutate mutate})
      :send   (fn [{query :remote} callback]
-               (let [;;_ (print "send" query)
-                     {[search] :children} (om/query->ast query)
+               (let [{[search] :children} (om/query->ast query)
                      _ (print "search:" search)]
                  (go 
                    (let [result (<! (http/post "/api/query" 
                                                {:transit-params query}))
                          data (:body result)
-                         _ (print data)
-                         
                          k (:key search)
                          read? (instance? cljs.core/Keyword k)]
                      (callback (if read? data (k data)))))))}))
@@ -89,56 +88,54 @@
   (om/transact! this `[(data/title {:val ~(.. e -target -value)})]))
 
 (defn change-cat [e this]
-  (om/transact! this `[(select/cat {:val ~(.. e -target value)})]))
+  (om/transact! this `[(select/cat {:val ~(.. e -target -value)})]))
 
 (defui CatOption
   static om/IQuery
   (query [this]
          `[:cat/id :cat/name])
   Object
-  (render [this]
-   (let [{:keys [id name] :as props} (om/props this)]
+  (render
+   [this]
+   (let [{:keys [cat/id cat/name] :as props} (om/props this)]
      (html
       [:option {:value id} name]))))
 
 (def cat-option (om/factory CatOption))
 
+
 (defui SelectView
-  static om/IQuery
-  (query [this]
-    ;;(let [subquery (om/get-query CatOption)] 
-    ;;     `[{:data/cats subquery}]))
-         [:data/cats])
   Object
   (render
    [this]
-   (let [{:keys [cats] :as props} (om/props this)　
-         _ (println cats)]
+   (let [{:keys [cats cat] :as props} (om/props this)]
     (html
      [:div
       [:select {:on-change #(change-cat % this)}
        (map #(cat-option %) cats)]
       ]))))
 
-
-
 (def select-view (om/factory SelectView))
 
 (defui RootView
   static om/IQuery
   (query [this]
+         (let []
          `[(:data/title {:id 0})
            :selected
-           :data/input])
+           :data/input
+           :data/cats]))
   Object
-  (render [this]
-    (let [{:keys [:data/title selected data/input] :as props} (om/props this)]
+  (render
+   [this]
+   (let [{:keys [data/cats data/title selected data/input] :as props} (om/props this)
+         _ (println "cat" selected)]
       (html
        [:div
         [:input {:type "text"
                  :value input
                  :on-change (fn [e] (change-input e this))}]
-        (select-view {:cat cat})
+        (select-view {:cat cat :cats cats})
         [:h1 title]
         [:h2 ]
         [:h3 ]
