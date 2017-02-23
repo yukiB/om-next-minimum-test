@@ -3,7 +3,7 @@
   (:require [om.next.server :as om]
             [cheshire.core :as json]))
 
-(def titles ["sakura" "tsubaki" "kaede"])
+(def titles ["python" "clojure" "c++"])
 
 (def data {:flower [[0 "sakura"] [1 "tubaki"] [2 "kaede"]]
            :fruit [[0 "apple"] [1 "banana"] [2 "orange"]]
@@ -15,9 +15,22 @@
 (defmethod read :data/title
   [{:keys [ast] :as env} k _]
   (let [params (:params ast)
-        v (nth titles (:num params))]
+        _ (.println System/out "TITLE")
+        _ (.println System/out ast)
+        v (nth titles (:id params))
+        _ (.println System/out v)]
     {:value v}))
 
+(defmethod read :data/cat
+  [{:keys [ast] :as env} k _]
+  (let [n (get-in ast [:params :id])
+        v (nth (keys data) n)]
+    {:value {:id n :name (name v)}}))
+
+(defmethod read :data/cats
+  [{:keys [ast] :as env} k _]
+  (let [_ (.println System/out "data/cats")]
+    {:value (map-indexed (fn [idx itm] {:cat/id idx :cat/name itm}) (keys data))}))
 
 (defmulti mutate om/dispatch)
 
@@ -25,7 +38,7 @@
 (defmethod mutate `data/title
   [{:keys [state ast] :as env} key {:keys [val]}]
   (let []
-  {:value {:data/title val}}
+  {:value {:data/title (str "input: " val)}}
   ))
 
 (defn parse-query [query]

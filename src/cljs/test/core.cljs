@@ -10,6 +10,7 @@
 
 (enable-console-print!)
 
+
 (def app-state (atom {}))
 
 (defn get-data [state key]
@@ -24,32 +25,44 @@
 
 (defmethod read :data/title
   [{:keys [state ast] :as env} key params]
-  (let [st @state
-        _ (print "read" key st)]
+  (let [st @state]
     (if (contains? st key) 
       {:value (key st)}
       {:remote ast})))
 
+(defmethod read :data/cat
+  [{:keys [state ast] :as env} key params]
+  (let [st @state]
+    (if (contains? st key) 
+      {:value (key st)}
+      {:remote ast})))
+
+(defmethod read :selected
+  [{:keys [state ast] :as env} key params]
+  (when (contains? @state key) 
+    {:value (key @state)}))
+
+(defmethod read :data/cats
+  [{:keys [state ast] :as env} key params]
+  (let [st @state
+        _ (print "cats" key)]
+    (if (contains? st key) 
+      {:value (key st)}
+      {:remote ast})))
 
 (defmulti mutate om/dispatch)
 
 (defmethod mutate `data/title
   [{:keys [state ast] :as env} key {:keys [val]}]
-  (let [_ (print "--------")
-        _ (print val)
-        _ (print ast)
-        _ (print "--------")]
+  {:remote ast})
+
+(defmethod mutate `select/cat
+  [{:keys [state ast] :as env} key {:keys [val]}]
   (merge
    {:action
-    (swap! state assoc-in [:data/title] "changed")}
-;;    (fn []
-;;      (swap! state update-in [:data/title] #(let [_ (print "change"  %)
-;;                                                  _ (print ast)]
-   ;;                                              (set [:data/by-input input]))))}
-   
-   (when (seq val) {:remote ast}))))
-
-
+    (swap! state update-in [:data/cats]
+           #(set (conj % [:cats/by-number val])))}
+   (when (seq val) {:remote ast})))
 
 (def reconciler
   (om/reconciler
@@ -64,6 +77,8 @@
                    (let [result (<! (http/post "/api/query" 
                                                {:transit-params query}))
                          data (:body result)
+                         _ (print data)
+                         
                          k (:key search)
                          read? (instance? cljs.core/Keyword k)]
                      (callback (if read? data (k data)))))))}))
@@ -71,32 +86,62 @@
 (defonce mounted (atom false))
 
 (defn change-input [e this]
-  (print "change")
   (om/transact! this `[(data/title {:val ~(.. e -target -value)})]))
 
+(defn change-cat [e this]
+  (om/transact! this `[(select/cat {:val ~(.. e -target value)})]))
 
-
-
-
-(defui SelectView
+(defui CatOption
+  static om/IQuery
+  (query [this]
+         `[:cat/id :cat/name])
   Object
   (render [this]
-          ))
+   (let [{:keys [id name] :as props} (om/props this)]
+     (html
+      [:option {:value id} name]))))
+
+(def cat-option (om/factory CatOption))
+
+(defui SelectView
+  static om/IQuery
+  (query [this]
+    ;;(let [subquery (om/get-query CatOption)] 
+    ;;     `[{:data/cats subquery}]))
+         [:data/cats])
+  Object
+  (render
+   [this]
+   (let [{:keys [cats] :as props} (om/props this)　
+         _ (println cats)]
+    (html
+     [:div
+      [:select {:on-change #(change-cat % this)}
+       (map #(cat-option %) cats)]
+      ]))))
+
+
+
 (def select-view (om/factory SelectView))
 
 (defui RootView
   static om/IQuery
   (query [this]
-         `[(:data/title {:num 0}) :data/input])
+         `[(:data/title {:id 0})
+           :selected
+           :data/input])
   Object
   (render [this]
-    (let [{:keys [data/title data/input] :as props} (om/props this)]
+    (let [{:keys [:data/title selected data/input] :as props} (om/props this)]
       (html
        [:div
         [:input {:type "text"
                  :value input
                  :on-change (fn [e] (change-input e this))}]
+        (select-view {:cat cat})
         [:h1 title]
+        [:h2 ]
+        [:h3 ]
         ]))))
 
 (defn init! []

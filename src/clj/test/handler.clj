@@ -7,6 +7,7 @@
             [bidi.ring :refer [make-handler]]
             [ring.util.response :as res]
             [test.parser :as parser]
+            [test.route :as route]
             [test.page :as page]))
 
 (defn error-body
